@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-SCION is a Skyrim Script Extender (SKSE) plugin that optimizes SkyUI container inventory interactions. It is built on **CommonLibSSE-NG** to support multiple Skyrim versions (SE, AE, GOG, VR).
+SCION is a Skyrim Script Extender (SKSE) plugin that optimizes SkyUI container inventory interactions. It is built on **CommonLibSSE-NG** to support multiple Skyrim versions (SE, AE, GOG, VR). The project also includes the SkyUI Flash UI source code in `scionui/src/`, written in **ActionScript 2.0**, which implements Skyrim's SkyUI menus (container, inventory, barter, MCM, etc.).
 
 ## Build Commands
 
@@ -82,6 +82,33 @@ A large (609-line) header-only utility file organized into namespaces. Key ones:
 | `KeyUtil` | Keyboard/gamepad input mapping and macro offsets |
 | `SystemUtil::File` | Scan directories for `.ini` config files |
 
-### SkyUI Assets (`skyui/`)
+### SkyUI UI Layer (`scionui/`)
 
-Pre-built Flash UI files (`.swf`) and Papyrus scripts (`.psc`/`.pex`) for SkyUI menus (container, barter, inventory, MCM, etc.). These are deployed as-is and are not compiled by CMake — edit `.psc` sources and recompile with Papyrus compiler separately if changes are needed.
+The `scionui/` directory contains the full SkyUI Flash/ActionScript UI source:
+
+- **`scionui/src/`** — ActionScript 2.0 (AS2) source files (`.as`) and Flash project files (`.fla`)
+- **`scionui/interface/`** — Compiled SWF output, deployed to Skyrim's `Data/Interface/` folder
+
+**Language:** ActionScript 2.0 — not AS3. No strict typing enforcement; uses a `MovieClip`-based component model. SKSE calls go through `Common/skse.as`.
+
+**Compilation:** Open `.fla` files in Adobe Flash Pro / Adobe Animate, then publish to produce `.swf` files. Place the resulting SWFs in `scionui/interface/`. There is no CMake integration for the AS2 layer.
+
+**Module map:**
+
+| Directory | Role |
+|---|---|
+| `CLIK/` | Flash component framework — buttons, scrollbars, sliders, base `UIComponent` |
+| `Common/` | Shared utilities, SKSE bridge (`skse.as`), list/tab components |
+| `ItemMenus/` | **Primary area of interest** — Container, Inventory, Barter, Gift menus + shared `ItemCard`, `CategoryList`, `BottomBar` |
+| `ModConfigPanel/` | MCM dialogs and controls |
+| `HUDWidgets/` | HUD overlay widgets |
+| `CraftingMenu/` | Crafting/smithing menu |
+| `FavoritesMenu/` | Favorites/quick-select menu |
+| `MapMenu/` | World map UI |
+| `MessageBox/` | Dialog/message box menus |
+| `PauseMenu/` | Pause/system menu |
+| `Resources/` | Shared assets (fonts, icons, etc.) |
+
+**`version.as`** (at `scionui/src/version.as`) defines `SKYUI_VERSION_STRING`, `SKYUI_RELEASE_IDX`, and related version constants.
+
+For container/inventory optimization work, start in `scionui/src/ItemMenus/`.
