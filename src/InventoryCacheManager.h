@@ -18,6 +18,7 @@ struct CachedItem {
     bool        IsEquipped;
     RE::FormID  FormID;
     int32_t     Count;
+    float       InfoStat;
 };
 
 struct ItemPointers {
@@ -26,10 +27,13 @@ struct ItemPointers {
 };
 
 enum class SortColumn : int32_t {
-    Name             = 0,
-    Weight           = 1,
-    Value            = 2,
-    ValueWeightRatio = 3
+    Icon        = 0,
+    Name        = 1,
+    Value       = 2,
+    ValueWeight = 3,
+    Weight      = 4,
+    Damage      = 5,
+    Armor       = 6,
 };
 
 class InventoryCacheManager {
@@ -42,15 +46,16 @@ public:
                        std::string_view name, int32_t filterType,
                        float weight, int32_t value, float valueWeightRatio,
                        bool isStolen, bool isEnchanted, bool isEquipped,
-                       RE::FormID formID, int32_t count,
+                       RE::FormID formID, int32_t count, float infoStat,
                        RE::InventoryEntryData* entryData,
                        RE::ExtraDataList* extraData);
 
     void UpdateActiveView(bool bIsPlayer, int32_t categoryFilter,
-                          int32_t sortColumn, bool bSortAscending,
+                          int32_t sortColumn, int32_t sortState,
                           const std::string& searchString);
 
     std::vector<CachedItem>      GetPage(bool bIsPlayer, int startIndex, int count);
+    int                          GetActiveViewCount(bool bIsPlayer);
     std::optional<ItemPointers>  GetPointersByID(uint64_t sessionID);
 
 private:

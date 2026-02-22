@@ -96,6 +96,18 @@ class ContainerMenu extends ItemMenu
 		_equipModeControls = {keyCode: _equipModeKey};
 	}
 
+	// @override ItemMenu
+	public function InvalidateItemList(): Void
+	{
+		var bIsPlayer:Boolean = (inventoryLists.categoryList.activeSegment != 0);
+		var sort   = _getSCIONSortState();
+		var result = this["SCION_RequestItems"](bIsPlayer, sort.columnId, sort.stateId, -1, "", 0, 1000000);
+		if (!result || !result.items)
+			return;
+		inventoryLists.itemList.entryList = result.items;
+		inventoryLists.itemList.InvalidateData();
+	}
+
 	// @API
 	public function ShowItemsList(): Void
 	{

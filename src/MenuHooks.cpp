@@ -52,10 +52,16 @@ namespace {
             const bool     baseEnchant = entry->IsEnchanted();
             const float    vwr         = weight > 0.0f ? static_cast<float>(value) / weight : 0.0f;
 
+            float infoStat = 0.0f;
+            if (auto* weap = entry->object->As<RE::TESObjectWEAP>())
+                infoStat = static_cast<float>(weap->GetAttackDamage());
+            else if (auto* armo = entry->object->As<RE::TESObjectARMO>())
+                infoStat = armo->GetArmorRating();
+
             if (!entry->extraLists) {
                 cache->StoreItem(bIsPlayer, name, filterType, weight, value, vwr,
                                  false, baseEnchant, isEquipped, formID,
-                                 entry->countDelta, entry, nullptr);
+                                 entry->countDelta, infoStat, entry, nullptr);
                 ++stored;
                 continue;
             }
@@ -73,7 +79,7 @@ namespace {
                 stackSum += count;
                 cache->StoreItem(bIsPlayer, name, filterType, weight, value, vwr,
                                  isStolen, isEnchanted, isEquipped, formID,
-                                 count, entry, xList);
+                                 count, infoStat, entry, xList);
                 ++stored;
             }
 
@@ -81,7 +87,7 @@ namespace {
             if (pristine > 0) {
                 cache->StoreItem(bIsPlayer, name, filterType, weight, value, vwr,
                                  false, baseEnchant, isEquipped, formID,
-                                 pristine, entry, nullptr);
+                                 pristine, infoStat, entry, nullptr);
                 ++stored;
             }
         }
@@ -89,17 +95,80 @@ namespace {
         spdlog::info("SCION: populated {} {} items", stored, bIsPlayer ? "player" : "target");
     }
 
+    class RequestItemsHandler : public RE::GFxFunctionHandler {
+    public:
+        void Call(Params& a_params) override
+        {
+            if (a_params.argCount < 7)
+                return;
+
+            const bool        bIsPlayer = a_params.args[0].GetBool();
+            const int32_t     columnId  = static_cast<int32_t>(a_params.args[1].GetNumber());
+            const int32_t     stateId   = static_cast<int32_t>(a_params.args[2].GetNumber());
+            const int32_t     catFilter = static_cast<int32_t>(a_params.args[3].GetNumber());
+            const std::string search    = a_params.args[4].IsString()
+                                              ? std::string(a_params.args[4].GetString()) : "";
+            const int pageStart = static_cast<int>(a_params.args[5].GetNumber());
+            const int pageSize  = static_cast<int>(a_params.args[6].GetNumber());
+
+            auto* cache = InventoryCacheManager::GetSingleton();
+            cache->UpdateActiveView(bIsPlayer, catFilter, columnId, stateId, search);
+
+            const int total = cache->GetActiveViewCount(bIsPlayer);
+            auto      page  = cache->GetPage(bIsPlayer, pageStart, pageSize);
+
+            RE::GFxValue itemsArr;
+            a_params.movie->CreateArray(&itemsArr);
+
+            for (const auto& item : page) {
+                RE::GFxValue entry;
+                a_params.movie->CreateObject(&entry);
+                entry.SetMember("text",            RE::GFxValue(item.Name.c_str()));
+                entry.SetMember("count",           RE::GFxValue(static_cast<double>(item.Count)));
+                entry.SetMember("filterFlag",      RE::GFxValue(static_cast<double>(item.FilterType)));
+                entry.SetMember("infoWeight",      RE::GFxValue(static_cast<double>(item.Weight)));
+                entry.SetMember("infoValue",       RE::GFxValue(static_cast<double>(item.Value)));
+                entry.SetMember("infoValueWeight", RE::GFxValue(static_cast<double>(item.ValueWeightRatio)));
+                entry.SetMember("catSort",         RE::GFxValue(static_cast<double>(item.FilterType)));
+                entry.SetMember("typeSort",        RE::GFxValue(static_cast<double>(item.FilterType)));
+                entry.SetMember("isStolen",        RE::GFxValue(item.IsStolen));
+                entry.SetMember("isEnchanted",     RE::GFxValue(item.IsEnchanted));
+                entry.SetMember("isEquipped",      RE::GFxValue(item.IsEquipped));
+                entry.SetMember("formId",          RE::GFxValue(static_cast<double>(item.FormID)));
+                entry.SetMember("infoStat",        RE::GFxValue(static_cast<double>(item.InfoStat)));
+                entry.SetMember("sessionId",       RE::GFxValue(static_cast<double>(item.SessionID)));
+                entry.SetMember("enabled",         RE::GFxValue(true));
+                itemsArr.PushBack(entry);
+            }
+
+            RE::GFxValue result;
+            a_params.movie->CreateObject(&result);
+            result.SetMember("items", itemsArr);
+            result.SetMember("total", RE::GFxValue(static_cast<double>(total)));
+
+            if (a_params.retVal)
+                *a_params.retVal = result;
+        }
+    };
+
     template <class TMenu>
-    void BypassGFxItemList(TMenu* menu)
+    void InjectRequestFunction(TMenu* menu)
     {
         auto& rtd = menu->GetRuntimeData();
         if (!menu->uiMovie || !rtd.root.IsObject())
             return;
+        RE::GFxValue fn;
+        menu->uiMovie->CreateFunction(&fn, new RequestItemsHandler());
+        rtd.root.SetMember("SCION_RequestItems", fn);
+    }
 
-        RE::GFxValue emptyArr;
-        menu->uiMovie->CreateArray(&emptyArr);
-        // Placeholder pending AS2 contract — update once scionui/src/ItemMenus/ defines the signal function
-        rtd.root.Invoke("InvalidateItemList", nullptr, &emptyArr, 1);
+    template <class TMenu>
+    void SignalReady(TMenu* menu)
+    {
+        auto& rtd = menu->GetRuntimeData();
+        if (!menu->uiMovie || !rtd.root.IsObject())
+            return;
+        rtd.root.Invoke("InvalidateItemList", nullptr, nullptr, 0);
     }
 
     bool IsTriggerMessage(const RE::UIMessage& a_msg)
@@ -120,8 +189,11 @@ namespace {
 
         const auto result = _InventoryMenu_ProcessMessage(a_this, a_msg);
 
-        if (trigger)
-            BypassGFxItemList(static_cast<RE::InventoryMenu*>(a_this));
+        if (trigger) {
+            auto* typed = static_cast<RE::InventoryMenu*>(a_this);
+            InjectRequestFunction(typed);
+            SignalReady(typed);
+        }
 
         return result;
     }
@@ -143,8 +215,11 @@ namespace {
 
         const auto result = _ContainerMenu_ProcessMessage(a_this, a_msg);
 
-        if (trigger)
-            BypassGFxItemList(static_cast<RE::ContainerMenu*>(a_this));
+        if (trigger) {
+            auto* typed = static_cast<RE::ContainerMenu*>(a_this);
+            InjectRequestFunction(typed);
+            SignalReady(typed);
+        }
 
         return result;
     }
@@ -166,8 +241,11 @@ namespace {
 
         const auto result = _BarterMenu_ProcessMessage(a_this, a_msg);
 
-        if (trigger)
-            BypassGFxItemList(static_cast<RE::BarterMenu*>(a_this));
+        if (trigger) {
+            auto* typed = static_cast<RE::BarterMenu*>(a_this);
+            InjectRequestFunction(typed);
+            SignalReady(typed);
+        }
 
         return result;
     }
