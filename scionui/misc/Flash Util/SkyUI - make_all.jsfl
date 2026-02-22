@@ -1,1 +1,0 @@
-﻿FLfile.runCommandLine("skyui_runscript.bat make_all.pl");
