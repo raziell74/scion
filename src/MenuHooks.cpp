@@ -58,7 +58,7 @@ namespace {
             const int32_t     rawValue    = entry->GetValue();
             const bool        isEquipped  = entry->IsWorn();
             const RE::FormID  formID      = entry->object->GetFormID();
-            // AS2: a_entryObject.baseId = a_entryObject.formId & 0x00FFFFFF
+            // AS2: a_entryObject.baseId = a_entryObject.formId & 0x00FFFFFF (lower 24 bits; upper 8 = mod index)
             const std::uint32_t baseFormID = static_cast<std::uint32_t>(formID) & 0x00FFFFFFu;
             const bool        baseEnchant = entry->IsEnchanted();
 

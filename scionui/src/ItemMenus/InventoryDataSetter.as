@@ -1,4 +1,4 @@
-﻿import skyui.util.Translator;
+import skyui.util.Translator;
 
 import skyui.defines.Actor;
 import skyui.defines.Armor;
@@ -20,18 +20,34 @@ class InventoryDataSetter extends ItemcardDataExtender
 	
   /* PUBLIC FUNCTIONS */
 
-	// @override ItemcardDataExtender
+  // @override ItemcardDataExtender
 	public function processEntry(a_entryObject: Object, a_itemInfo: Object): Void
 	{
-		a_entryObject.baseId = a_entryObject.formId & 0x00FFFFFF;
 		a_entryObject.type = a_itemInfo.type;
-
 		a_entryObject.isEquipped = (a_entryObject.equipState > 0);
 		a_entryObject.isStolen = (a_itemInfo.stolen == true);
 
+		// SCION: payload is precomputed in SKSE; only use when we have non-empty display strings.
+		// When rawWeight <= 0 C++ sends displayWeight = "", which is defined in AS2; require non-empty so
+		// vanilla path runs and sets infoWeight = null instead of leaving numeric 0.
+		if (a_entryObject.displayWeight != undefined && a_entryObject.displayWeight != "") {
+			if (a_entryObject.formType == Form.TYPE_ARMOR)
+				a_entryObject.infoArmor = a_entryObject.infoStat;
+			else if (a_entryObject.formType == Form.TYPE_WEAPON || a_entryObject.formType == Form.TYPE_AMMO)
+				a_entryObject.infoDamage = a_entryObject.infoStat;
+			if (a_entryObject.subTypeDisplay != undefined && a_entryObject.subTypeDisplay.indexOf("$") == 0)
+				a_entryObject.subTypeDisplay = Translator.translate(a_entryObject.subTypeDisplay);
+			if (a_entryObject.weightClassDisplay != undefined && a_entryObject.weightClassDisplay.indexOf("$") == 0)
+				a_entryObject.weightClassDisplay = Translator.translate(a_entryObject.weightClassDisplay);
+			if (a_entryObject.materialDisplay != undefined && a_entryObject.materialDisplay.indexOf("$") == 0)
+				a_entryObject.materialDisplay = Translator.translate(a_entryObject.materialDisplay);
+			return;
+		}
+
+		// Vanilla path: compute baseId and all extended data from game/itemInfo
+		a_entryObject.baseId = a_entryObject.formId & 0x00FFFFFF;
 		a_entryObject.infoValue = (a_itemInfo.value > 0) ? (Math.round(a_itemInfo.value * 100) / 100) : null;
 		a_entryObject.infoWeight =(a_itemInfo.weight > 0) ? (Math.round(a_itemInfo.weight * 100) / 100) : null;
-		
 		a_entryObject.infoValueWeight = (a_itemInfo.weight > 0 && a_itemInfo.value > 0) ? Math.round(a_itemInfo.value / a_itemInfo.weight) : null;
 
 		switch (a_entryObject.formType) {

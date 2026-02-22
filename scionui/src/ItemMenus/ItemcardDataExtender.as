@@ -1,4 +1,4 @@
-﻿import gfx.io.GameDelegate;
+import gfx.io.GameDelegate;
 
 import skyui.defines.Form;
 
@@ -64,6 +64,9 @@ class ItemcardDataExtender implements IListProcessor
 
 	private function fixSKSEExtendedObject(a_extendedObject: Object): Void
 	{
+		// SCION: payload is precomputed in SKSE; do not rename or overwrite properties
+		if (a_extendedObject.displayWeight != undefined)
+			return;
 		if (a_extendedObject.formType == undefined)
 			return;
 
