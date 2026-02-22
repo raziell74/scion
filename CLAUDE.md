@@ -111,7 +111,7 @@ The `scionui/` directory contains the full SkyUI Flash/ActionScript UI source:
 
 **Language:** ActionScript 2.0 — not AS3. No strict typing enforcement; uses a `MovieClip`-based component model. SKSE calls go through `Common/skse.as`.
 
-**Compilation:** Open `.fla` files in Adobe Flash Pro / Adobe Animate, then publish to produce `.swf` files. Place the resulting SWFs in `scionui/interface/`. There is no CMake integration for the AS2 layer.
+**Compilation:** Remind user to open `.fla` files related to action script updates in Adobe Flash and produce `.swf` files. Place the resulting SWFs in `scionui/interface/`. There is no CMake integration for the AS2 layer.
 
 **Module map:**
 
