@@ -10,17 +10,25 @@ SCION is a Skyrim Script Extender (SKSE) plugin that optimizes SkyUI container i
 
 Requires Visual Studio 2022, CMake 3.21+, vcpkg with the custom registry configured, and a C++23-capable toolchain (MSVC 19.35+ / VS 2022 17.5+).
 
-```bash
-# Configure
-cmake --preset build-debug-msvc    # Debug build
-cmake --preset build-release-msvc  # Release build
+**Always use the debug presets** when running CMake. Before building, delete the CMake cache and reconfigure, then build:
 
-# Build
+```bash
+# 1. Delete cache and reconfigure (use debug presets only)
+cmake --preset build-debug-msvc --fresh
+
+# 2. Build
 cmake --build --preset debug-msvc
-cmake --build --preset release-msvc
 ```
 
-Build output goes to `build/debug-msvc/` or `build/release-msvc/`. There are no lint or test commands — the project relies on MSVC's built-in analysis and Clang-Tidy (configured in CMakePresets.json).
+If `--fresh` is not available (CMake &lt; 3.24), remove the build directory then configure:
+
+```bash
+rm -rf build/debug-msvc
+cmake --preset build-debug-msvc
+cmake --build --preset debug-msvc
+```
+
+Build output goes to `build/debug-msvc/`. Do not use the release presets (`build-release-msvc` / `release-msvc`) for routine CMake runs. There are no lint or test commands — the project relies on MSVC's built-in analysis and Clang-Tidy (configured in CMakePresets.json).
 
 ## Deployment
 
