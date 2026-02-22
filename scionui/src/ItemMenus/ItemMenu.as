@@ -597,4 +597,39 @@ class ItemMenu extends MovieClip
 	}
 	
 	private function updateBottomBar(a_bSelected: Boolean): Void {}
+
+	private function _getSCIONSortState(): Object
+	{
+		var layout = inventoryLists.itemList.layout;
+		if (!layout || !layout.sortAttributes || layout.sortAttributes.length == 0)
+			return {columnId: 1, stateId: 1};
+
+		var primaryAttr:String = layout.sortAttributes[0];
+		var isDesc:Boolean     = layout.sortOptions != null &&
+		                         (layout.sortOptions[0] & Array.DESCENDING) != 0;
+
+		switch (primaryAttr) {
+		case "catSort":         return {columnId: 0, stateId: isDesc ? 2 : 1};
+		case "text":
+		case "nameSort":        return {columnId: 1, stateId: isDesc ? 2 : 1};
+		case "isStolen":        return {columnId: 1, stateId: isDesc ? 3 : 4};
+		case "infoValue":       return {columnId: 2, stateId: isDesc ? 1 : 2};
+		case "infoValueWeight": return {columnId: 3, stateId: isDesc ? 1 : 2};
+		case "infoWeight":      return {columnId: 4, stateId: isDesc ? 1 : 2};
+		case "infoDamage":      return {columnId: 5, stateId: isDesc ? 1 : 2};
+		case "infoArmor":       return {columnId: 6, stateId: isDesc ? 1 : 2};
+		default:                return {columnId: 1, stateId: 1};
+		}
+	}
+
+	// @GFx — called by C++ after cache is populated
+	public function InvalidateItemList(): Void
+	{
+		var sort   = _getSCIONSortState();
+		var result = this["SCION_RequestItems"](true, sort.columnId, sort.stateId, -1, "", 0, 1000000);
+		if (!result || !result.items)
+			return;
+		inventoryLists.itemList.entryList = result.items;
+		inventoryLists.itemList.InvalidateData();
+	}
 }

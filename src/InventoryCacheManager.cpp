@@ -22,7 +22,7 @@ uint64_t InventoryCacheManager::StoreItem(bool bIsPlayer,
                                           std::string_view name, int32_t filterType,
                                           float weight, int32_t value, float valueWeightRatio,
                                           bool isStolen, bool isEnchanted, bool isEquipped,
-                                          RE::FormID formID, int32_t count,
+                                          RE::FormID formID, int32_t count, float infoStat,
                                           RE::InventoryEntryData* entryData,
                                           RE::ExtraDataList* extraData)
 {
@@ -36,17 +36,18 @@ uint64_t InventoryCacheManager::StoreItem(bool bIsPlayer,
     activeView.clear();
 
     masterList.push_back(CachedItem{
-        .SessionID       = id,
-        .Name            = std::string(name),
-        .FilterType      = filterType,
-        .Weight          = weight,
-        .Value           = value,
+        .SessionID        = id,
+        .Name             = std::string(name),
+        .FilterType       = filterType,
+        .Weight           = weight,
+        .Value            = value,
         .ValueWeightRatio = valueWeightRatio,
-        .IsStolen        = isStolen,
-        .IsEnchanted     = isEnchanted,
-        .IsEquipped      = isEquipped,
-        .FormID          = formID,
-        .Count           = count,
+        .IsStolen         = isStolen,
+        .IsEnchanted      = isEnchanted,
+        .IsEquipped       = isEquipped,
+        .FormID           = formID,
+        .Count            = count,
+        .InfoStat         = infoStat,
     });
 
     _pointerMap.emplace(id, ItemPointers{ entryData, extraData });
@@ -55,7 +56,7 @@ uint64_t InventoryCacheManager::StoreItem(bool bIsPlayer,
 }
 
 void InventoryCacheManager::UpdateActiveView(bool bIsPlayer, int32_t categoryFilter,
-                                             int32_t sortColumn, bool bSortAscending,
+                                             int32_t sortColumn, int32_t sortState,
                                              const std::string& searchString)
 {
     std::unique_lock lock{ _mutex };
@@ -73,29 +74,80 @@ void InventoryCacheManager::UpdateActiveView(bool bIsPlayer, int32_t categoryFil
         activeView.push_back(&item);
     }
 
-    const bool asc = bSortAscending;
     switch (static_cast<SortColumn>(sortColumn)) {
     case SortColumn::Name:
-        std::ranges::sort(activeView, [asc](const CachedItem* a, const CachedItem* b) {
+        std::ranges::sort(activeView, [sortState](const CachedItem* a, const CachedItem* b) {
+            if (sortState == 3 || sortState == 4) {
+                if (a->IsStolen != b->IsStolen)
+                    return sortState == 3 ? a->IsStolen > b->IsStolen : a->IsStolen < b->IsStolen;
+            }
+            const bool desc = sortState == 2;
             auto la = Util::String::ToLower(a->Name);
             auto lb = Util::String::ToLower(b->Name);
-            return asc ? la < lb : la > lb;
-        });
-        break;
-    case SortColumn::Weight:
-        std::ranges::sort(activeView, [asc](const CachedItem* a, const CachedItem* b) {
-            return asc ? a->Weight < b->Weight : a->Weight > b->Weight;
+            if (la != lb)
+                return desc ? la > lb : la < lb;
+            return a->FormID < b->FormID;
         });
         break;
     case SortColumn::Value:
-        std::ranges::sort(activeView, [asc](const CachedItem* a, const CachedItem* b) {
-            return asc ? a->Value < b->Value : a->Value > b->Value;
+        std::ranges::sort(activeView, [sortState](const CachedItem* a, const CachedItem* b) {
+            const bool desc = sortState == 1;
+            if (a->Value != b->Value)
+                return desc ? a->Value > b->Value : a->Value < b->Value;
+            auto la = Util::String::ToLower(a->Name);
+            auto lb = Util::String::ToLower(b->Name);
+            if (la != lb)
+                return la < lb;
+            return a->FormID < b->FormID;
         });
         break;
-    case SortColumn::ValueWeightRatio:
-        std::ranges::sort(activeView, [asc](const CachedItem* a, const CachedItem* b) {
-            return asc ? a->ValueWeightRatio < b->ValueWeightRatio
-                       : a->ValueWeightRatio > b->ValueWeightRatio;
+    case SortColumn::Weight:
+        std::ranges::sort(activeView, [sortState](const CachedItem* a, const CachedItem* b) {
+            const bool desc = sortState == 1;
+            if (a->Weight != b->Weight)
+                return desc ? a->Weight > b->Weight : a->Weight < b->Weight;
+            auto la = Util::String::ToLower(a->Name);
+            auto lb = Util::String::ToLower(b->Name);
+            if (la != lb)
+                return la < lb;
+            return a->FormID < b->FormID;
+        });
+        break;
+    case SortColumn::ValueWeight:
+        std::ranges::sort(activeView, [sortState](const CachedItem* a, const CachedItem* b) {
+            const bool desc = sortState == 1;
+            if (a->ValueWeightRatio != b->ValueWeightRatio)
+                return desc ? a->ValueWeightRatio > b->ValueWeightRatio : a->ValueWeightRatio < b->ValueWeightRatio;
+            auto la = Util::String::ToLower(a->Name);
+            auto lb = Util::String::ToLower(b->Name);
+            if (la != lb)
+                return la < lb;
+            return a->FormID < b->FormID;
+        });
+        break;
+    case SortColumn::Damage:
+    case SortColumn::Armor:
+        std::ranges::sort(activeView, [sortState](const CachedItem* a, const CachedItem* b) {
+            const bool desc = sortState == 1;
+            if (a->InfoStat != b->InfoStat)
+                return desc ? a->InfoStat > b->InfoStat : a->InfoStat < b->InfoStat;
+            auto la = Util::String::ToLower(a->Name);
+            auto lb = Util::String::ToLower(b->Name);
+            if (la != lb)
+                return la < lb;
+            return a->FormID < b->FormID;
+        });
+        break;
+    case SortColumn::Icon:
+        std::ranges::sort(activeView, [sortState](const CachedItem* a, const CachedItem* b) {
+            const bool desc = sortState == 2;
+            if (a->FilterType != b->FilterType)
+                return desc ? a->FilterType > b->FilterType : a->FilterType < b->FilterType;
+            auto la = Util::String::ToLower(a->Name);
+            auto lb = Util::String::ToLower(b->Name);
+            if (la != lb)
+                return desc ? la > lb : la < lb;
+            return a->FormID < b->FormID;
         });
         break;
     }
@@ -116,6 +168,13 @@ std::vector<CachedItem> InventoryCacheManager::GetPage(bool bIsPlayer, int start
     for (int i = startIndex; i < end; ++i)
         page.push_back(*view[i]);
     return page;
+}
+
+int InventoryCacheManager::GetActiveViewCount(bool bIsPlayer)
+{
+    std::shared_lock lock{ _mutex };
+    const auto& view = bIsPlayer ? _playerActiveView : _targetActiveView;
+    return static_cast<int>(view.size());
 }
 
 std::optional<ItemPointers> InventoryCacheManager::GetPointersByID(uint64_t sessionID)
