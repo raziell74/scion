@@ -22,7 +22,10 @@ uint64_t InventoryCacheManager::StoreItem(bool bIsPlayer,
                                           std::string_view name, int32_t filterType,
                                           float weight, int32_t value, float valueWeightRatio,
                                           bool isStolen, bool isEnchanted, bool isEquipped,
-                                          RE::FormID formID, int32_t count, float infoStat,
+                                          RE::FormID formID, std::uint32_t baseFormID, int32_t count, float infoStat,
+                                          std::string_view displayWeight, std::string_view displayValue,
+                                          std::string_view displayValueWeight, std::string_view displayInfoStat,
+                                          const ExtendedItemData& extended,
                                           RE::InventoryEntryData* entryData,
                                           RE::ExtraDataList* extraData)
 {
@@ -35,20 +38,27 @@ uint64_t InventoryCacheManager::StoreItem(bool bIsPlayer,
 
     activeView.clear();
 
-    masterList.push_back(CachedItem{
-        .SessionID        = id,
-        .Name             = std::string(name),
-        .FilterType       = filterType,
-        .Weight           = weight,
-        .Value            = value,
-        .ValueWeightRatio = valueWeightRatio,
-        .IsStolen         = isStolen,
-        .IsEnchanted      = isEnchanted,
-        .IsEquipped       = isEquipped,
-        .FormID           = formID,
-        .Count            = count,
-        .InfoStat         = infoStat,
-    });
+    CachedItem item{
+        .SessionID          = id,
+        .Name               = std::string(name),
+        .FilterType         = filterType,
+        .Weight             = weight,
+        .Value              = value,
+        .ValueWeightRatio   = valueWeightRatio,
+        .IsStolen           = isStolen,
+        .IsEnchanted        = isEnchanted,
+        .IsEquipped         = isEquipped,
+        .FormID             = formID,
+        .BaseFormID         = baseFormID,
+        .Count              = count,
+        .InfoStat           = infoStat,
+        .DisplayWeight      = std::string(displayWeight),
+        .DisplayValue       = std::string(displayValue),
+        .DisplayValueWeight = std::string(displayValueWeight),
+        .DisplayInfoStat    = std::string(displayInfoStat),
+        .Extended           = extended,
+    };
+    masterList.push_back(std::move(item));
 
     _pointerMap.emplace(id, ItemPointers{ entryData, extraData });
 

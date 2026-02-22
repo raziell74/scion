@@ -1,5 +1,8 @@
 #include "MenuHooks.h"
 #include "InventoryCacheManager.h"
+#include "ItemDataExtractor.h"
+#include <cmath>
+#include <format>
 #include <spdlog/spdlog.h>
 
 namespace {
@@ -8,6 +11,12 @@ namespace {
     ProcessMessageFn _InventoryMenu_ProcessMessage;
     ProcessMessageFn _ContainerMenu_ProcessMessage;
     ProcessMessageFn _BarterMenu_ProcessMessage;
+
+    // AS2: Math.round(x*100)/100
+    inline double RoundTo2Decimals(double x)
+    {
+        return std::round(x * 100.0) / 100.0;
+    }
 
     int32_t GetFilterType(RE::TESBoundObject* obj)
     {
@@ -43,25 +52,52 @@ namespace {
             if (!entry || !entry->object)
                 continue;
 
-            const char*    name        = entry->GetDisplayName();
-            const int32_t  filterType  = GetFilterType(entry->object);
-            const float    weight      = entry->GetWeight();
-            const int32_t  value       = entry->GetValue();
-            const bool     isEquipped  = entry->IsWorn();
-            const RE::FormID formID    = entry->object->GetFormID();
-            const bool     baseEnchant = entry->IsEnchanted();
-            const float    vwr         = weight > 0.0f ? static_cast<float>(value) / weight : 0.0f;
+            const char*       name        = entry->GetDisplayName();
+            const int32_t     filterType  = GetFilterType(entry->object);
+            const float       rawWeight   = entry->GetWeight();
+            const int32_t     rawValue    = entry->GetValue();
+            const bool        isEquipped  = entry->IsWorn();
+            const RE::FormID  formID      = entry->object->GetFormID();
+            // AS2: a_entryObject.baseId = a_entryObject.formId & 0x00FFFFFF (lower 24 bits; upper 8 = mod index)
+            const std::uint32_t baseFormID = static_cast<std::uint32_t>(formID) & 0x00FFFFFFu;
+            const bool        baseEnchant = entry->IsEnchanted();
 
-            float infoStat = 0.0f;
+            // AS2: infoValue = (value>0)? (Math.round(value*100)/100) : null; same for weight
+            const float roundedWeight = static_cast<float>(RoundTo2Decimals(static_cast<double>(rawWeight)));
+            const int32_t roundedValue = static_cast<int32_t>(RoundTo2Decimals(static_cast<double>(rawValue)));
+            // AS2: infoValueWeight = (weight>0 && value>0)? Math.round(value/weight) : null
+            // Use roundedWeight > 0 so we never divide by zero when rawWeight rounds down to 0 (e.g. < 0.005)
+            const float vwr = (roundedWeight > 0.0f && rawValue > 0)
+                                  ? static_cast<float>(std::round(static_cast<double>(roundedValue) / roundedWeight))
+                                  : 0.0f;
+
+            // Tempering (plan §6): Use base damage/armor here. If CommonLibSSE-NG exposes
+            // GetAttackDamage/GetArmorRating(ExtraDataList*) or improved-item API, call it per stack and round.
+            float rawInfoStat = 0.0f;
             if (auto* weap = entry->object->As<RE::TESObjectWEAP>())
-                infoStat = static_cast<float>(weap->GetAttackDamage());
+                rawInfoStat = static_cast<float>(weap->GetAttackDamage());
             else if (auto* armo = entry->object->As<RE::TESObjectARMO>())
-                infoStat = armo->GetArmorRating();
+                rawInfoStat = armo->GetArmorRating();
+            // AS2: infoArmor/infoDamage = (x>0)? (Math.round(x*100)/100) : null
+            const float infoStat = static_cast<float>(RoundTo2Decimals(static_cast<double>(rawInfoStat)));
+
+            // Pre-formatted strings for SkyUI textField assignment without AS conversion
+            const std::string displayWeight =
+                rawWeight > 0.0f ? std::format("{:.2f}", roundedWeight) : "";
+            const std::string displayValue =
+                rawValue > 0 ? std::format("{}", roundedValue) : "";
+            const std::string displayValueWeight =
+                (roundedWeight > 0.0f && rawValue > 0) ? std::format("{}", static_cast<int>(vwr)) : "";
+            const std::string displayInfoStat =
+                rawInfoStat > 0.0f ? std::format("{:.2f}", infoStat) : "";
 
             if (!entry->extraLists) {
-                cache->StoreItem(bIsPlayer, name, filterType, weight, value, vwr,
-                                 false, baseEnchant, isEquipped, formID,
-                                 entry->countDelta, infoStat, entry, nullptr);
+                ExtendedItemData extended = ItemDataExtractor::Extract(entry->object, nullptr, baseFormID);
+                cache->StoreItem(bIsPlayer, name, filterType, roundedWeight, roundedValue, vwr,
+                                 false, baseEnchant, isEquipped, formID, baseFormID,
+                                 entry->countDelta, infoStat,
+                                 displayWeight, displayValue, displayValueWeight, displayInfoStat,
+                                 extended, entry, nullptr);
                 ++stored;
                 continue;
             }
@@ -71,23 +107,29 @@ namespace {
                 if (!xList)
                     continue;
 
+                ExtendedItemData extended = ItemDataExtractor::Extract(entry->object, xList, baseFormID);
                 auto*         xCount     = xList->GetByType<RE::ExtraCount>();
                 const int32_t count      = xCount ? static_cast<int32_t>(xCount->count) : 1;
                 const bool    isStolen   = xList->HasType<RE::ExtraOwnership>();
                 const bool    isEnchanted = baseEnchant || xList->HasType<RE::ExtraEnchantment>();
 
                 stackSum += count;
-                cache->StoreItem(bIsPlayer, name, filterType, weight, value, vwr,
-                                 isStolen, isEnchanted, isEquipped, formID,
-                                 count, infoStat, entry, xList);
+                cache->StoreItem(bIsPlayer, name, filterType, roundedWeight, roundedValue, vwr,
+                                 isStolen, isEnchanted, isEquipped, formID, baseFormID,
+                                 count, infoStat,
+                                 displayWeight, displayValue, displayValueWeight, displayInfoStat,
+                                 extended, entry, xList);
                 ++stored;
             }
 
             const int32_t pristine = entry->countDelta - stackSum;
             if (pristine > 0) {
-                cache->StoreItem(bIsPlayer, name, filterType, weight, value, vwr,
-                                 false, baseEnchant, isEquipped, formID,
-                                 pristine, infoStat, entry, nullptr);
+                ExtendedItemData extended = ItemDataExtractor::Extract(entry->object, nullptr, baseFormID);
+                cache->StoreItem(bIsPlayer, name, filterType, roundedWeight, roundedValue, vwr,
+                                 false, baseEnchant, isEquipped, formID, baseFormID,
+                                 pristine, infoStat,
+                                 displayWeight, displayValue, displayValueWeight, displayInfoStat,
+                                 extended, entry, nullptr);
                 ++stored;
             }
         }
@@ -121,6 +163,7 @@ namespace {
             a_params.movie->CreateArray(&itemsArr);
 
             for (const auto& item : page) {
+                const auto& e = item.Extended;
                 RE::GFxValue entry;
                 a_params.movie->CreateObject(&entry);
                 entry.SetMember("text",            RE::GFxValue(item.Name.c_str()));
@@ -135,9 +178,28 @@ namespace {
                 entry.SetMember("isEnchanted",     RE::GFxValue(item.IsEnchanted));
                 entry.SetMember("isEquipped",      RE::GFxValue(item.IsEquipped));
                 entry.SetMember("formId",          RE::GFxValue(static_cast<double>(item.FormID)));
+                entry.SetMember("baseId",          RE::GFxValue(static_cast<double>(item.BaseFormID)));
                 entry.SetMember("infoStat",        RE::GFxValue(static_cast<double>(item.InfoStat)));
                 entry.SetMember("sessionId",       RE::GFxValue(static_cast<double>(item.SessionID)));
                 entry.SetMember("enabled",         RE::GFxValue(true));
+                entry.SetMember("displayWeight",   RE::GFxValue(item.DisplayWeight.c_str()));
+                entry.SetMember("displayValue",    RE::GFxValue(item.DisplayValue.c_str()));
+                entry.SetMember("displayValueWeight", RE::GFxValue(item.DisplayValueWeight.c_str()));
+                entry.SetMember("displayInfoStat", RE::GFxValue(item.DisplayInfoStat.c_str()));
+                entry.SetMember("formType",       RE::GFxValue(static_cast<double>(e.FormType)));
+                entry.SetMember("subType",        RE::GFxValue(static_cast<double>(e.SubType)));
+                entry.SetMember("subTypeDisplay", RE::GFxValue(e.SubTypeDisplayKey.c_str()));
+                entry.SetMember("weightClass",     RE::GFxValue(static_cast<double>(e.WeightClass)));
+                entry.SetMember("weightClassDisplay", RE::GFxValue(e.WeightClassDisplayKey.c_str()));
+                entry.SetMember("partMask",       RE::GFxValue(static_cast<double>(e.PartMask)));
+                entry.SetMember("mainPartMask",    RE::GFxValue(static_cast<double>(e.MainPartMask)));
+                entry.SetMember("material",       RE::GFxValue(static_cast<double>(e.Material)));
+                entry.SetMember("materialDisplay", RE::GFxValue(e.MaterialDisplayKey.c_str()));
+                entry.SetMember("isPoisoned",     RE::GFxValue(e.IsPoisoned));
+                entry.SetMember("isRead",         RE::GFxValue(e.IsRead));
+                entry.SetMember("duration",       RE::GFxValue(static_cast<double>(e.Duration)));
+                entry.SetMember("magnitude",      RE::GFxValue(static_cast<double>(e.Magnitude)));
+                entry.SetMember("status",         RE::GFxValue(static_cast<double>(e.SoulGemStatus)));
                 itemsArr.PushBack(entry);
             }
 
