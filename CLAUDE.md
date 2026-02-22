@@ -61,11 +61,18 @@ SKSEPluginLoad()
 
 ### Where to Implement Things
 
-- **`src/hook.h` / `src/hook.cpp`** — Empty placeholders for Skyrim function hooks
+- **`src/MenuHooks.h` / `src/MenuHooks.cpp`** — VTable hooks for inventory menus; `InstallHooks()` called from `kDataLoaded`
+- **`src/hook.h` / `src/hook.cpp`** — Reserved stubs; add non-menu hook groups as separate files (same pattern as MenuHooks)
 - **`src/settings.h`** — Empty placeholder for INI/JSON config structures
-- **`src/plugin.cpp`** — Wire up hooks and settings inside the message handler cases
+- **`src/plugin.cpp`** — Wire up hooks and settings inside message handler cases
 
 > **Adding new source files:** Every new `.h` must be added to `cmake/headerlist.cmake` and every new `.cpp` to `cmake/sourcelist.cmake`. CMake will not pick them up automatically.
+
+### MenuHooks (`src/MenuHooks.h/.cpp`)
+
+VTable hooks on `ProcessMessage` (slot 4) for `InventoryMenu`, `ContainerMenu`, and `BarterMenu`. On `kShow` or `kInventoryUpdate` (type 8): clears the cache, populates player inventory (+ target inventory for Container/Barter), calls the original, then invokes `InvalidateItemList` on the SWF root to signal the AS2 layer to discard the vanilla item array.
+
+Install pattern: `REL::Relocation<std::uintptr_t>{ RE::VTABLE_*[0] }.write_vfunc(4, &thunk)` — returns the original as `uintptr_t`, cast to function pointer with `reinterpret_cast`.
 
 ### InventoryCacheManager (`src/InventoryCacheManager.h/.cpp`)
 
@@ -125,3 +132,9 @@ The `scionui/` directory contains the full SkyUI Flash/ActionScript UI source:
 **`version.as`** (at `scionui/src/version.as`) defines `SKYUI_VERSION_STRING`, `SKYUI_RELEASE_IDX`, and related version constants.
 
 For container/inventory optimization work, start in `scionui/src/ItemMenus/`.
+
+## CommonLibSSE-NG Gotchas
+
+- **`GetRuntimeData()` is per-subclass, not on `IMenu`** — `InventoryMenu`, `ContainerMenu`, and `BarterMenu` each define their own `RUNTIME_DATA` struct (with `root` at different offsets). Cast `IMenu*` to the specific type before calling `GetRuntimeData()`.
+- **VTABLE constants need `RE::` prefix** — `RE::VTABLE_InventoryMenu[0]`, `RE::VTABLE_ContainerMenu[0]`, `RE::VTABLE_BarterMenu[0]` (defined in `RE/Offsets_VTABLE.h` inside `namespace RE`).
+- **`write_vfunc` returns `uintptr_t`** — cast to your function pointer type with `reinterpret_cast<Fn>(reloc.write_vfunc(idx, &thunk))`.
