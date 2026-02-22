@@ -1,4 +1,5 @@
 #include "log.h"
+#include "InventoryCacheManager.h"
 
 
 void OnDataLoaded()
@@ -15,10 +16,12 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_msg)
 	case SKSE::MessagingInterface::kPostLoad:
 		break;
 	case SKSE::MessagingInterface::kPreLoadGame:
+		InventoryCacheManager::GetSingleton()->ClearAll();
 		break;
 	case SKSE::MessagingInterface::kPostLoadGame:
         break;
 	case SKSE::MessagingInterface::kNewGame:
+		InventoryCacheManager::GetSingleton()->ClearAll();
 		break;
 	}
 }

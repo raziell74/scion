@@ -8,7 +8,7 @@ SCION is a Skyrim Script Extender (SKSE) plugin that optimizes SkyUI container i
 
 ## Build Commands
 
-Requires Visual Studio 2022, CMake 3.21+, and vcpkg with the custom registry configured.
+Requires Visual Studio 2022, CMake 3.21+, vcpkg with the custom registry configured, and a C++23-capable toolchain (MSVC 19.35+ / VS 2022 17.5+).
 
 ```bash
 # Configure
@@ -57,13 +57,26 @@ SKSEPluginLoad()
       └─ kNewGame
 ```
 
-All message handler cases are currently empty stubs — implementation goes here.
+`kPreLoadGame` and `kNewGame` call `InventoryCacheManager::GetSingleton()->ClearAll()`. Other cases are stubs.
 
 ### Where to Implement Things
 
 - **`src/hook.h` / `src/hook.cpp`** — Empty placeholders for Skyrim function hooks
 - **`src/settings.h`** — Empty placeholder for INI/JSON config structures
 - **`src/plugin.cpp`** — Wire up hooks and settings inside the message handler cases
+
+> **Adding new source files:** Every new `.h` must be added to `cmake/headerlist.cmake` and every new `.cpp` to `cmake/sourcelist.cmake`. CMake will not pick them up automatically.
+
+### InventoryCacheManager (`src/InventoryCacheManager.h/.cpp`)
+
+The primary inventory backend. Implements a **Master List + Active View** pattern:
+- **Master List** — flat `std::vector<CachedItem>` of fully-resolved, UI-ready item snapshots
+- **Active View** — `std::vector<CachedItem*>` of raw pointers into the master list; filtered, sorted, and ready to paginate
+- **PointerMap** — `unordered_map<uint64_t, ItemPointers>` for O(1) lookup of live engine pointers by `SessionID`
+
+Write path: `ClearAll()` → `StoreItem()` × N → `UpdateActiveView()` → `GetPage()`. Call sequence is enforced by the caller; the manager does not track dirty state.
+
+Thread safety: write operations use `unique_lock<shared_mutex>`; reads use `shared_lock`.
 
 ### Cross-Version Compatibility
 
