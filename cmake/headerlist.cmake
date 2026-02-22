@@ -5,4 +5,5 @@ set(headers ${headers}
     src/hook.h
     src/settings.h
     src/InventoryCacheManager.h
+    src/MenuHooks.h
 )

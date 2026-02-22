@@ -1,5 +1,6 @@
 #include "log.h"
 #include "InventoryCacheManager.h"
+#include "MenuHooks.h"
 
 
 void OnDataLoaded()
@@ -11,7 +12,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* a_msg)
 {
 	switch (a_msg->type) {
 	case SKSE::MessagingInterface::kDataLoaded:
-        
+        MenuHooks::InstallHooks();
 		break;
 	case SKSE::MessagingInterface::kPostLoad:
 		break;
